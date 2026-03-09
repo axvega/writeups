@@ -100,3 +100,5 @@ cat /root/root.txt
 * La vulnerabilidad IDOR en `/data/<id>` es un recordatorio de que cualquier parámetro numérico en URLs debe validarse con control de acceso.
 * `cap_setuid` en un intérprete como Python es equivalente a un SUID bit — siempre revisar capabilities con `getcap`.
 * Credenciales en texto claro dentro de PCAPs es un hallazgo crítico en auditorías reales.
+
+Completada: https://labs.hackthebox.com/achievement/machine/1943272/351
