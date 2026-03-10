@@ -51,8 +51,12 @@ sudo -l
 ls -l /usr/local/bin/sudo
 ```
 
-Se detectó un binario vulnerable. Explotación:
+Causa raíz
+La vulnerabilidad CVE-2025-32463 afecta a versiones de sudo que permiten especificar un host remoto con el flag -h. Al resolver el hostname proporcionado, sudo consulta el sistema NSS (Name Service Switch), que carga módulos `libnss_*.so` según la configuración de `/etc/nsswitch.conf`.
+Si un atacante controla el nsswitch.conf o puede introducir una librería `libnss_*` maliciosa en el path de búsqueda, el constructor de esa librería se ejecuta bajo el contexto privilegiado de sudo antes de que se realice ninguna verificación de permisos.
 
+Explotación
+El flag -h acepta cualquier hostname. Al proporcionar uno que fuerce la resolución NSS con una librería controlada por el atacante:
 ```bash
 /usr/local/bin/sudo -h offramp.expressway.htb bash
 ```
